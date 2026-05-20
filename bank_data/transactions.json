@@ -1,0 +1,20 @@
+[
+  {
+    "tx_id": "2F1283AD",
+    "account_id": "ACCBD48D0",
+    "tx_type": "DEPOSIT",
+    "amount": 10.0,
+    "currency": "USD",
+    "note": "Initial deposit",
+    "timestamp": "2026-05-16T07:55:18.305341"
+  },
+  {
+    "tx_id": "25205226",
+    "account_id": "ACCC549A7",
+    "tx_type": "DEPOSIT",
+    "amount": 100.0,
+    "currency": "USD",
+    "note": "Initial deposit",
+    "timestamp": "2026-05-16T08:09:42.550402"
+  }
+]
