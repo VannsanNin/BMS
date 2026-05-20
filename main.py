@@ -1,10 +1,6 @@
-"""
-Banking Management System
-Uses: Classes/Objects, File Storage (JSON), Exception Handling, tkinter GUI
-"""
-
 import tkinter as tk
 from tkinter import ttk, messagebox, font
+from tkcalendar import DateEntry
 import json
 import os
 import re
@@ -112,10 +108,12 @@ class BankAccount:
     def from_dict(cls, d):
         d = d.copy()
         d["address"] = Address.from_dict(d["address"])
+        d.setdefault("branch", "Main Branch - Phnom Penh")
         return cls(**d)
 
 
 class Transaction:
+    # skip
     def __init__(self, account_id, tx_type, amount, currency, note="", tx_id=None, timestamp=None):
         self.tx_id = tx_id or str(uuid.uuid4())[:8].upper()
         self.account_id = account_id
@@ -138,6 +136,7 @@ class Transaction:
 # ─────────────────────────────────────────────
 
 class AccountRepository:
+    # skip
     def __init__(self):
         DATA_DIR.mkdir(exist_ok=True)
         if not ACCOUNTS_FILE.exists():
@@ -146,16 +145,22 @@ class AccountRepository:
             TRANSACTIONS_FILE.write_text("[]")
 
     def _load_accounts(self):
-        with open(ACCOUNTS_FILE, "r") as f:
-            return [BankAccount.from_dict(d) for d in json.load(f)]
+        raw = ACCOUNTS_FILE.read_text().strip()
+        if not raw:
+            return []
+        data = json.loads(raw)
+        return [BankAccount.from_dict(d) for d in data]
 
     def _save_accounts(self, accounts):
         with open(ACCOUNTS_FILE, "w") as f:
             json.dump([a.to_dict() for a in accounts], f, indent=2)
 
     def _load_transactions(self):
-        with open(TRANSACTIONS_FILE, "r") as f:
-            return [Transaction.from_dict(d) for d in json.load(f)]
+        raw = TRANSACTIONS_FILE.read_text().strip()
+        if not raw:
+            return []
+        data = json.loads(raw)
+        return [Transaction.from_dict(d) for d in data]
 
     def _save_transactions(self, txs):
         with open(TRANSACTIONS_FILE, "w") as f:
@@ -209,6 +214,7 @@ class AccountRepository:
 # ─────────────────────────────────────────────
 
 class BankingService:
+    # skip
     def __init__(self):
         self.repo = AccountRepository()
 
@@ -306,6 +312,21 @@ class BankingService:
     def delete_account(self, account_id):
         self.repo.delete_account(account_id)
 
+    def update_account(self, account):
+        self.repo.save_account(account)
+
+    def change_pin(self, account_id, old_pin, new_pin):
+        acc = self.repo.find_by_id(account_id)
+        if acc.pin_hash != self._hash_pin(old_pin):
+            raise ValidationError("Current PIN is incorrect.")
+        if len(new_pin) < 4:
+            raise ValidationError("PIN must be at least 4 digits.")
+        if not new_pin.isdigit():
+            raise ValidationError("PIN must contain digits only.")
+        acc.pin_hash = self._hash_pin(new_pin)
+        self.repo.save_account(acc)
+        return acc
+
 
 # ─────────────────────────────────────────────
 #  GUI — tkinter with multi-step registration
@@ -324,14 +345,26 @@ BLUE   = "#58A6FF"
 
 PUMI_API = "https://pumi.onrender.com/pumi"
 
-BRANCHES = ["Main Branch", "North Branch", "South Branch", "East Branch",
-            "West Branch", "Airport Branch", "Online Only"]
+CAMBODIA_PROVINCES = [
+    ("01", "Banteay Meanchey"), ("02", "Battambang"), ("03", "Kampong Cham"),
+    ("04", "Kampong Chhnang"), ("05", "Kampong Speu"), ("06", "Kampong Thom"),
+    ("07", "Kampot"), ("08", "Kandal"), ("09", "Koh Kong"), ("10", "Kratié"),
+    ("11", "Mondulkiri"), ("12", "Phnom Penh"), ("13", "Preah Vihear"),
+    ("14", "Prey Veng"), ("15", "Pursat"), ("16", "Ratanakiri"),
+    ("17", "Siem Reap"), ("18", "Preah Sihanouk"), ("19", "Stung Treng"),
+    ("20", "Svay Rieng"), ("21", "Takéo"), ("22", "Oddar Meanchey"),
+    ("23", "Kep"), ("24", "Pailin"), ("25", "Tboung Khmum"),
+]
+
+BRANCHES = ["Main Branch - Phnom Penh", "Branch - Siem Reap", "Branch - Sihanoukville", "Branch - Battambang"]
 
 CURRENCIES = ["USD", "KHR", "EUR", "GBP", "AUD", "SGD", "THB", "JPY"]
 
 ACCOUNT_TYPES = ["Savings", "Checking", "Fixed Deposit", "Joint", "Business", "Student"]
 
 COUNTRY_CODES = ["+855 KH", "+1 US", "+44 UK", "+61 AU", "+65 SG", "+66 TH", "+84 VN"]
+
+COUNTRIES = ["Cambodia", "USA", "United Kingdom", "Australia", "Singapore"]
 
 
 class BankingApp(tk.Tk):
@@ -350,7 +383,7 @@ class BankingApp(tk.Tk):
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure(".", background=DARK, foreground=TEXT, font=("Georgia", 10))
-        style.configure("TFrame", background=DARK)
+        # style.configure("TFrame", background=DARK)
         style.configure("TLabel", background=DARK, foreground=TEXT)
         style.configure("TEntry", fieldbackground=CARD, foreground=TEXT,
                          insertcolor=TEXT, bordercolor=BORDER, relief="flat", padding=6)
@@ -409,7 +442,7 @@ class BankingApp(tk.Tk):
 
         bar = tk.Frame(self, bg=PANEL, height=70)
         bar.pack(fill="x")
-        tk.Label(bar, text="✦ NexaBank", font=("Georgia", 20, "bold"),
+        tk.Label(bar, text="NexaBank", font=("Georgia", 20, "bold"),
                  bg=PANEL, fg=GOLD).pack(side="left", padx=30, pady=18)
         tk.Label(bar, text="Modern Banking • Secure • Reliable",
                  font=("Georgia", 10, "italic"),
@@ -428,11 +461,11 @@ class BankingApp(tk.Tk):
         btn_frame = tk.Frame(center, bg=DARK)
         btn_frame.pack()
 
-        self._btn(btn_frame, "🏦  Open New Account", self._show_register,
+        self._btn(btn_frame, "Open New Account", self._show_register,
                   width=22, pady=14).grid(row=0, column=0, padx=12, pady=8)
-        self._btn(btn_frame, "🔑  Login to Account", self._show_login,
+        self._btn(btn_frame, "Login to Account", self._show_login,
                   bg=CARD, fg=GOLD, width=22, pady=14).grid(row=0, column=1, padx=12, pady=8)
-        self._btn(btn_frame, "📋  All Accounts", self._show_all_accounts,
+        self._btn(btn_frame, "All Accounts", self._show_all_accounts,
                   bg=CARD, fg=TEXT, width=22, pady=14).grid(row=0, column=2, padx=12, pady=8)
 
         tk.Label(center, text=f"© {date.today().year} NexaBank. All rights reserved.",
@@ -516,10 +549,11 @@ class BankingApp(tk.Tk):
         self._e_fullname = ttk.Entry(sec, width=30)
         self._e_fullname.grid(row=1, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
 
-        tk.Label(sec, text="Date of Birth *  (YYYY-MM-DD)", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+        tk.Label(sec, text="Date of Birth *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
             row=0, column=1, sticky="w", pady=(4, 0))
-        self._e_dob = ttk.Entry(sec, width=30)
-        self._e_dob.insert(0, "1990-01-01")
+        self._e_dob = DateEntry(sec, width=28, date_pattern="y-mm-dd",
+                                background='darkblue', foreground='white', borderwidth=2,
+                                year=1990, month=1, day=1)
         self._e_dob.grid(row=1, column=1, sticky="ew", pady=(0, 8))
 
         tk.Label(sec, text="Gender *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
@@ -561,8 +595,7 @@ class BankingApp(tk.Tk):
             full_name = self._e_fullname.get().strip()
             if not full_name:
                 raise ValidationError("Full name is required.")
-            dob = self._e_dob.get().strip()
-            datetime.strptime(dob, "%Y-%m-%d")
+            dob = self._e_dob.get()
             phone = self._cc_var.get().split()[0] + self._e_phone.get().strip()
             BankingService._validate_phone(self._e_phone.get().strip())
             email = self._e_email.get().strip()
@@ -591,7 +624,7 @@ class BankingApp(tk.Tk):
             r.raise_for_status()
             return [(p["id"], p["name_en"]) for p in r.json()]
         except Exception:
-            return []
+            return list(CAMBODIA_PROVINCES)
 
     def _fetch_districts(self, province_id):
         try:
@@ -718,15 +751,16 @@ class BankingApp(tk.Tk):
                                   font=("Georgia", 10), padx=6, pady=6)
         self._e_street.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
-        tk.Label(sec, text="Country", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+        tk.Label(sec, text="Country *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
             row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Label(sec, text="Cambodia", bg=CARD, fg=GOLD,
-                 font=("Georgia", 10, "bold"), padx=8, pady=4).grid(
-            row=3, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
+        self._country_var = tk.StringVar(value=COUNTRIES[0])
+        self._country_cb = ttk.Combobox(sec, textvariable=self._country_var,
+                                        values=COUNTRIES, state="readonly", width=28)
+        self._country_cb.grid(row=3, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
 
         tk.Label(sec, text="Province *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
             row=2, column=1, sticky="w", pady=(4, 0))
-        self._province_var = tk.StringVar()
+        self._province_var = tk.StringVar(value="Loading provinces...")
         self._province_cb = ttk.Combobox(sec, textvariable=self._province_var,
                                           state="readonly", width=28)
         self._province_cb.grid(row=3, column=1, sticky="ew", pady=(0, 8))
@@ -770,13 +804,14 @@ class BankingApp(tk.Tk):
             province = self._province_var.get()
             district = self._district_var.get()
             commune = self._commune_var.get()
-            if not all([street, province, district, commune]):
-                raise ValidationError("Street, province, district, and commune are required.")
+            country = self._country_var.get()
+            if not all([street, province, district, commune, country]):
+                raise ValidationError("Street, province, district, commune, and country are required.")
             self.reg_data.update(dict(
                 street=street, city=commune,
                 state=district,
                 postal_code="",
-                country="Cambodia"
+                country=country
             ))
             self._clear()
             self._build_reg_step3()
@@ -808,17 +843,18 @@ class BankingApp(tk.Tk):
         ttk.Combobox(sec, textvariable=self._curr_var, values=CURRENCIES,
                      state="readonly", width=28).grid(row=1, column=1, sticky="ew", pady=(0, 8))
 
-        tk.Label(sec, text="Initial Deposit Amount *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+        tk.Label(sec, text="Branch *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
             row=2, column=0, sticky="w", pady=(4, 0))
-        self._e_deposit = ttk.Entry(sec, width=30)
-        self._e_deposit.insert(0, "0")
-        self._e_deposit.grid(row=3, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
-
-        tk.Label(sec, text="Preferred Branch (Optional)", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
-            row=2, column=1, sticky="w", pady=(4, 0))
         self._branch_var = tk.StringVar(value=BRANCHES[0])
         ttk.Combobox(sec, textvariable=self._branch_var, values=BRANCHES,
-                     state="readonly", width=28).grid(row=3, column=1, sticky="ew", pady=(0, 8))
+                     state="readonly", width=28).grid(row=3, column=0, sticky="ew",
+                                                     padx=(0, 10), pady=(0, 8))
+
+        tk.Label(sec, text="Initial Deposit Amount *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+            row=4, column=0, sticky="w", pady=(4, 0))
+        self._e_deposit = ttk.Entry(sec, width=30)
+        self._e_deposit.insert(0, "0")
+        self._e_deposit.grid(row=5, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
 
         nav = tk.Frame(body, bg=DARK)
         nav.pack(fill="x", pady=16)
@@ -1048,6 +1084,9 @@ class BankingApp(tk.Tk):
             ("💸  Withdraw", self._do_withdraw, RED, "white"),
             ("↔  Transfer", self._do_transfer, BLUE, DARK),
             ("📄  Statement", self._do_statement, CARD, TEXT),
+            ("✏  Edit Profile", self._show_edit_account, BLUE, DARK),
+            ("🔑  Change PIN", self._do_change_pin, CARD, TEXT),
+            ("🗑  Delete Account", self._do_delete_account, RED, "white"),
         ]
         for text, cmd, bg_, fg_ in btns:
             b = tk.Button(actions_card, text=text, command=cmd,
@@ -1105,6 +1144,296 @@ class BankingApp(tk.Tk):
         except BankingError:
             pass
         self._show_dashboard()
+
+    # ── EDIT ACCOUNT ──────────────────────────────
+
+    def _show_edit_account(self):
+        self._clear()
+        acc = self.current_account
+
+        bar = tk.Frame(self, bg=PANEL)
+        bar.pack(fill="x")
+        tk.Label(bar, text="✦ NexaBank", font=("Georgia", 14, "bold"),
+                 bg=PANEL, fg=GOLD).pack(side="left", padx=20, pady=12)
+        tk.Button(bar, text="← Dashboard", command=self._show_dashboard,
+                  bg=PANEL, fg=MUTED, relief="flat",
+                  font=("Georgia", 9), cursor="hand2").pack(side="right", padx=20)
+
+        body = self._scrollable_body()
+
+        tk.Label(body, text="Edit Profile", font=("Georgia", 16, "bold"),
+                 bg=DARK, fg=TEXT).pack(anchor="w", pady=(0, 8))
+
+        sec1 = self._section(body, "Contact Information")
+        sec1.columnconfigure(0, weight=1)
+
+        self._edit_fullname = ttk.Entry(sec1, width=40)
+        self._edit_fullname.insert(0, acc.full_name)
+        self._field_row(sec1, "Full Name", self._edit_fullname, 0)
+
+        self._edit_phone = ttk.Entry(sec1, width=40)
+        self._edit_phone.insert(0, acc.phone)
+        self._field_row(sec1, "Phone", self._edit_phone, 1)
+
+        self._edit_email = ttk.Entry(sec1, width=40)
+        self._edit_email.insert(0, acc.email)
+        self._field_row(sec1, "Email", self._edit_email, 2)
+
+        sec2 = self._section(body, "Address")
+        sec2.columnconfigure((0, 1), weight=1, uniform="col")
+
+        tk.Label(sec2, text="Street / House No. *", bg=DARK, fg=MUTED,
+                 font=("Georgia", 9)).grid(row=0, column=0, columnspan=2, sticky="w")
+        self._edit_street = tk.Text(sec2, height=3, bg=CARD, fg=TEXT,
+                                     insertbackground=TEXT, relief="flat",
+                                     font=("Georgia", 10), padx=6, pady=6)
+        self._edit_street.insert("1.0", acc.address.street)
+        self._edit_street.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+
+        tk.Label(sec2, text="Country *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+            row=2, column=0, sticky="w", pady=(4, 0))
+        self._edit_country_var = tk.StringVar(value=acc.address.country or COUNTRIES[0])
+        self._edit_country_cb = ttk.Combobox(sec2, textvariable=self._edit_country_var,
+                                              values=COUNTRIES, state="readonly", width=28)
+        self._edit_country_cb.grid(row=3, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
+
+        tk.Label(sec2, text="Province *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+            row=2, column=1, sticky="w", pady=(4, 0))
+        self._edit_province_var = tk.StringVar(value="Loading provinces...")
+        self._edit_province_cb = ttk.Combobox(sec2, textvariable=self._edit_province_var,
+                                               state="readonly", width=28)
+        self._edit_province_cb.grid(row=3, column=1, sticky="ew", pady=(0, 8))
+        self._edit_province_cb._items = []
+
+        tk.Label(sec2, text="District *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+            row=4, column=0, sticky="w", pady=(4, 0))
+        self._edit_district_var = tk.StringVar()
+        self._edit_district_cb = ttk.Combobox(sec2, textvariable=self._edit_district_var,
+                                               state="readonly", width=28)
+        self._edit_district_cb.grid(row=5, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
+        self._edit_district_cb._items = []
+
+        tk.Label(sec2, text="Commune *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+            row=4, column=1, sticky="w", pady=(4, 0))
+        self._edit_commune_var = tk.StringVar()
+        self._edit_commune_cb = ttk.Combobox(sec2, textvariable=self._edit_commune_var,
+                                              state="readonly", width=28)
+        self._edit_commune_cb.grid(row=5, column=1, sticky="ew", pady=(0, 8))
+        self._edit_commune_cb._items = []
+
+        tk.Label(sec2, text="Village", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+            row=6, column=0, sticky="w", pady=(4, 0))
+        self._edit_village_var = tk.StringVar()
+        self._edit_village_cb = ttk.Combobox(sec2, textvariable=self._edit_village_var,
+                                              state="readonly", width=28)
+        self._edit_village_cb.grid(row=7, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
+        self._edit_village_cb._items = []
+
+        tk.Label(sec2, text="Postal Code", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
+            row=6, column=1, sticky="w", pady=(4, 0))
+        self._edit_postal = ttk.Entry(sec2, width=28)
+        self._edit_postal.insert(0, acc.address.postal_code)
+        self._edit_postal.grid(row=7, column=1, sticky="ew", pady=(0, 8))
+
+        self._load_edit_provinces_async()
+        self._edit_province_cb.bind("<<ComboboxSelected>>", self._edit_on_province_selected, add="+")
+
+        sec3 = self._section(body, "Account Information (read-only)")
+        sec3.columnconfigure(0, weight=1)
+        info_items = [
+            ("Account ID", acc.account_id),
+            ("Account Type", acc.account_type),
+            ("Currency", acc.currency),
+            ("Branch", acc.branch),
+            ("Balance", f"{acc.currency} {acc.balance:,.2f}"),
+        ]
+        for i, (k, v) in enumerate(info_items):
+            row_f = tk.Frame(sec3, bg=DARK)
+            row_f.pack(fill="x", pady=2)
+            tk.Label(row_f, text=k + ":", bg=DARK, fg=MUTED,
+                     font=("Georgia", 9), width=14, anchor="w").pack(side="left")
+            tk.Label(row_f, text=v, bg=DARK, fg=TEXT,
+                     font=("Georgia", 9)).pack(side="left")
+
+        nav = tk.Frame(body, bg=DARK)
+        nav.pack(fill="x", pady=16)
+        self._btn(nav, "← Back", self._show_dashboard, bg=CARD, fg=TEXT).pack(side="left")
+        self._btn(nav, "💾  Save Changes", self._save_edit, bg=GREEN, fg=DARK).pack(side="right")
+
+    def _load_edit_provinces_async(self):
+        def task():
+            items = self._fetch_provinces()
+            self.after(0, lambda: self._populate_combo(
+                self._edit_province_var, self._edit_province_cb, items))
+        threading.Thread(target=task, daemon=True).start()
+
+    def _edit_on_province_selected(self, event=None):
+        selected = self._edit_province_var.get()
+        items = getattr(self._edit_province_cb, "_items", [])
+        pid = None
+        for iid, name in items:
+            if name == selected:
+                pid = iid
+                break
+        if not pid:
+            return
+        self._edit_district_cb.configure(values=[])
+        self._edit_commune_cb.configure(values=[])
+        self._edit_village_cb.configure(values=[])
+        self._edit_district_var.set("")
+        self._edit_commune_var.set("")
+        self._edit_village_var.set("")
+        def task():
+            districts = self._fetch_districts(pid)
+            self.after(0, lambda: self._populate_combo(
+                self._edit_district_var, self._edit_district_cb, districts))
+            self.after(0, lambda: self._edit_district_cb.bind(
+                "<<ComboboxSelected>>", self._edit_on_district_selected, add="+"))
+        threading.Thread(target=task, daemon=True).start()
+
+    def _edit_on_district_selected(self, event=None):
+        selected = self._edit_district_var.get()
+        items = getattr(self._edit_district_cb, "_items", [])
+        did = None
+        for iid, name in items:
+            if name == selected:
+                did = iid
+                break
+        if not did:
+            return
+        self._edit_commune_cb.configure(values=[])
+        self._edit_village_cb.configure(values=[])
+        self._edit_commune_var.set("")
+        self._edit_village_var.set("")
+        def task():
+            communes = self._fetch_communes(did)
+            self.after(0, lambda: self._populate_combo(
+                self._edit_commune_var, self._edit_commune_cb, communes))
+            self.after(0, lambda: self._edit_commune_cb.bind(
+                "<<ComboboxSelected>>", self._edit_on_commune_selected, add="+"))
+        threading.Thread(target=task, daemon=True).start()
+
+    def _edit_on_commune_selected(self, event=None):
+        selected = self._edit_commune_var.get()
+        items = getattr(self._edit_commune_cb, "_items", [])
+        cid = None
+        for iid, name in items:
+            if name == selected:
+                cid = iid
+                break
+        if not cid:
+            return
+        self._edit_village_cb.configure(values=[])
+        self._edit_village_var.set("")
+        def task():
+            villages = self._fetch_villages(cid)
+            self.after(0, lambda: self._populate_combo(
+                self._edit_village_var, self._edit_village_cb, villages))
+        threading.Thread(target=task, daemon=True).start()
+
+    def _save_edit(self):
+        try:
+            full_name = self._edit_fullname.get().strip()
+            if not full_name:
+                raise ValidationError("Full name is required.")
+            phone = self._edit_phone.get().strip()
+            BankingService._validate_phone(phone)
+            email = self._edit_email.get().strip()
+            BankingService._validate_email(email)
+            street = self._edit_street.get("1.0", "end").strip()
+            if not street:
+                raise ValidationError("Street is required.")
+
+            acc = self.current_account
+            acc.full_name = full_name
+            acc.phone = phone
+            acc.email = email
+            acc.address.street = street
+            acc.address.city = self._edit_commune_var.get()
+            acc.address.state = self._edit_district_var.get()
+            acc.address.postal_code = self._edit_postal.get().strip()
+            acc.address.country = self._edit_country_var.get()
+
+            self.service.update_account(acc)
+            self.current_account = acc
+            messagebox.showinfo("Success", "Profile updated successfully.")
+            self._show_dashboard()
+        except (ValidationError, BankingError) as e:
+            messagebox.showerror("Error", str(e))
+
+    # ── CHANGE PIN ────────────────────────────────
+
+    def _do_change_pin(self):
+        win = tk.Toplevel(self)
+        win.title("Change PIN")
+        win.configure(bg=DARK)
+        win.geometry("380x300")
+        win.resizable(False, False)
+        win.grab_set()
+
+        tk.Label(win, text="🔑  Change PIN", font=("Georgia", 14, "bold"),
+                 bg=DARK, fg=TEXT).pack(pady=(20, 14))
+
+        tk.Label(win, text="Current PIN", bg=DARK, fg=MUTED,
+                 font=("Georgia", 9)).pack(anchor="w", padx=30)
+        e_old = ttk.Entry(win, show="●", width=32)
+        e_old.pack(fill="x", padx=30, pady=(2, 10), ipady=4)
+
+        tk.Label(win, text="New PIN (4-6 digits)", bg=DARK, fg=MUTED,
+                 font=("Georgia", 9)).pack(anchor="w", padx=30)
+        e_new = ttk.Entry(win, show="●", width=32)
+        e_new.pack(fill="x", padx=30, pady=(2, 10), ipady=4)
+
+        tk.Label(win, text="Confirm New PIN", bg=DARK, fg=MUTED,
+                 font=("Georgia", 9)).pack(anchor="w", padx=30)
+        e_new2 = ttk.Entry(win, show="●", width=32)
+        e_new2.pack(fill="x", padx=30, pady=(2, 10), ipady=4)
+
+        msg_var = tk.StringVar()
+        tk.Label(win, textvariable=msg_var, bg=DARK, fg=RED,
+                 font=("Georgia", 9)).pack()
+
+        def submit():
+            try:
+                old = e_old.get()
+                new = e_new.get()
+                new2 = e_new2.get()
+                if new != new2:
+                    raise ValidationError("PINs do not match.")
+                self.service.change_pin(self.current_account.account_id, old, new)
+                win.destroy()
+                messagebox.showinfo("Success", "PIN changed successfully.")
+            except (ValidationError, BankingError) as e:
+                msg_var.set(str(e))
+
+        self._btn(win, "Change PIN", submit, width=20, pady=10).pack(pady=10)
+        self._btn(win, "Cancel", win.destroy, bg=CARD, fg=TEXT, width=20, pady=8).pack()
+
+    # ── DELETE ACCOUNT ────────────────────────────
+
+    def _do_delete_account(self):
+        acc = self.current_account
+        ok = messagebox.askyesno(
+            "Delete Account",
+            f"Are you sure you want to delete account {acc.account_id} ({acc.full_name})?\n\n"
+            "This action CANNOT be undone!",
+            icon="warning"
+        )
+        if not ok:
+            return
+        ok2 = messagebox.askyesno(
+            "Confirm Deletion",
+            "Are you absolutely sure? All account data will be permanently removed.",
+            icon="warning"
+        )
+        if not ok2:
+            return
+        try:
+            self.service.delete_account(acc.account_id)
+            messagebox.showinfo("Deleted", f"Account {acc.account_id} has been deleted.")
+            self._show_home()
+        except BankingError as e:
+            messagebox.showerror("Error", str(e))
 
     # ── OPERATIONS ────────────────────────────────
 
@@ -1258,6 +1587,51 @@ class BankingApp(tk.Tk):
 
         tk.Label(main, text=f"Total accounts: {len(accounts)}",
                  bg=DARK, fg=MUTED, font=("Georgia", 9)).pack(anchor="e", pady=4)
+
+        act_frame = tk.Frame(main, bg=DARK)
+        act_frame.pack(fill="x", pady=8)
+        self._btn(act_frame, "✏  Edit Selected",
+                  lambda: self._edit_selected_account(tree),
+                  bg=BLUE, fg=DARK, width=18, pady=8).pack(side="left", padx=4)
+        self._btn(act_frame, "🗑  Delete Selected",
+                  lambda: self._delete_selected_account(tree),
+                  bg=RED, fg="white", width=18, pady=8).pack(side="left", padx=4)
+        self._btn(act_frame, "↻  Refresh", self._show_all_accounts,
+                  bg=CARD, fg=TEXT, width=14, pady=8).pack(side="right", padx=4)
+
+    def _edit_selected_account(self, tree):
+        sel = tree.selection()
+        if not sel:
+            messagebox.showwarning("No Selection", "Please select an account to edit.")
+            return
+        values = tree.item(sel[0], "values")
+        account_id = values[0]
+        try:
+            self.current_account = self.service.repo.find_by_id(account_id)
+            self._show_edit_account()
+        except BankingError as e:
+            messagebox.showerror("Error", str(e))
+
+    def _delete_selected_account(self, tree):
+        sel = tree.selection()
+        if not sel:
+            messagebox.showwarning("No Selection", "Please select an account to delete.")
+            return
+        values = tree.item(sel[0], "values")
+        account_id, name = values[0], values[1]
+        ok = messagebox.askyesno(
+            "Delete Account",
+            f"Delete account {account_id} ({name})?\n\nThis CANNOT be undone!",
+            icon="warning"
+        )
+        if not ok:
+            return
+        try:
+            self.service.delete_account(account_id)
+            messagebox.showinfo("Deleted", f"Account {account_id} has been deleted.")
+            self._show_all_accounts()
+        except BankingError as e:
+            messagebox.showerror("Error", str(e))
 
 
 # ─────────────────────────────────────────────

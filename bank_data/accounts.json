@@ -1,46 +1,24 @@
 [
   {
-    "account_id": "ACCBD48D0",
-    "full_name": "NIN VANNSAN",
-    "dob": "1990-01-01",
-    "gender": "Male",
-    "national_id": "12345678",
-    "phone": "+855976002148",
-    "email": "vannsannin@gmail.com",
-    "address": {
-      "street": "PP",
-      "city": "PP",
-      "state": "Phnom Penh",
-      "postal_code": "12000",
-      "country": "Cambodia"
-    },
-    "account_type": "Student",
-    "balance": 10.0,
-    "currency": "USD",
-    "branch": "Online Only",
-    "created_at": "2026-05-16T07:55:18.304474",
-    "pin_hash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
-  },
-  {
-    "account_id": "ACCC549A7",
+    "account_id": "ACC3BE2A9",
     "full_name": "test",
     "dob": "1990-01-01",
     "gender": "Male",
-    "national_id": "12345678",
-    "phone": "+855123456789",
+    "national_id": "11321321321",
+    "phone": "+855123213131",
     "email": "test@gmail.com",
     "address": {
-      "street": "3",
-      "city": "Tram Kak",
-      "state": "Tram Kak",
-      "postal_code": "11000",
+      "street": "24234",
+      "city": "Robieb",
+      "state": "Rovieng",
+      "postal_code": "",
       "country": "Cambodia"
     },
     "account_type": "Savings",
     "balance": 100.0,
     "currency": "USD",
-    "branch": "Airport Branch",
-    "created_at": "2026-05-16T08:09:42.546559",
+    "branch": "Main Branch - Phnom Penh",
+    "created_at": "2026-05-26T20:35:11.383662",
     "pin_hash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
   }
 ]
