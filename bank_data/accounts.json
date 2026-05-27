@@ -1,7 +1,7 @@
 [
   {
     "account_id": "ACC3BE2A9",
-    "full_name": "test",
+    "full_name": "NIN VANNSAN",
     "dob": "1990-01-01",
     "gender": "Male",
     "national_id": "11321321321",
@@ -9,8 +9,8 @@
     "email": "test@gmail.com",
     "address": {
       "street": "24234",
-      "city": "Robieb",
-      "state": "Rovieng",
+      "city": "",
+      "state": "",
       "postal_code": "",
       "country": "Cambodia"
     },
