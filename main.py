@@ -1,13 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, font
-from tkcalendar import DateEntry
 import json
 import os
 import re
 import uuid
 import hashlib
 import threading
-import requests
 from datetime import datetime, date
 from pathlib import Path
 
@@ -344,6 +342,7 @@ RED    = "#F85149"
 BLUE   = "#58A6FF"
 
 PUMI_API = "https://pumi.onrender.com/pumi"
+PUMI_DATA_FILE = Path("bank_data") / "pumi_data.json"
 
 CAMBODIA_PROVINCES = [
     ("01", "Banteay Meanchey"), ("02", "Battambang"), ("03", "Kampong Cham"),
@@ -377,6 +376,7 @@ class BankingApp(tk.Tk):
         self.configure(bg=DARK)
         self._setup_styles()
         self.current_account = None
+        self._pumi_data = None
         self._show_home()
 
     def _setup_styles(self):
@@ -551,10 +551,18 @@ class BankingApp(tk.Tk):
 
         tk.Label(sec, text="Date of Birth *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
             row=0, column=1, sticky="w", pady=(4, 0))
-        self._e_dob = DateEntry(sec, width=28, date_pattern="y-mm-dd",
-                                background='darkblue', foreground='white', borderwidth=2,
-                                year=1990, month=1, day=1)
-        self._e_dob.grid(row=1, column=1, sticky="ew", pady=(0, 8))
+        dob_f = tk.Frame(sec, bg=DARK)
+        dob_f.grid(row=1, column=1, sticky="ew", pady=(0, 8))
+        dob_f.columnconfigure((0, 1, 2), weight=1, uniform="dob")
+        self._dob_year = ttk.Combobox(dob_f, values=[str(y) for y in range(1940, 2011)], state="readonly")
+        self._dob_year.set("1990")
+        self._dob_year.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self._dob_month = ttk.Combobox(dob_f, values=[f"{m:02d}" for m in range(1, 13)], state="readonly")
+        self._dob_month.set("01")
+        self._dob_month.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+        self._dob_day = ttk.Combobox(dob_f, values=[f"{d:02d}" for d in range(1, 32)], state="readonly")
+        self._dob_day.set("01")
+        self._dob_day.grid(row=0, column=2, sticky="ew")
 
         tk.Label(sec, text="Gender *", bg=DARK, fg=MUTED, font=("Georgia", 9)).grid(
             row=2, column=0, sticky="w", pady=(4, 0))
@@ -595,11 +603,13 @@ class BankingApp(tk.Tk):
             full_name = self._e_fullname.get().strip()
             if not full_name:
                 raise ValidationError("Full name is required.")
-            dob = self._e_dob.get()
+            dob = f"{self._dob_year.get()}-{self._dob_month.get()}-{self._dob_day.get()}"
             phone = self._cc_var.get().split()[0] + self._e_phone.get().strip()
             BankingService._validate_phone(self._e_phone.get().strip())
             email = self._e_email.get().strip()
             BankingService._validate_email(email)
+            if self.service.repo.find_by_email(email):
+                raise ValidationError(f"An account with email '{email}' already exists.")
             nid = self._e_nid.get().strip()
             if not nid:
                 raise ValidationError("National ID is required.")
@@ -616,39 +626,37 @@ class BankingApp(tk.Tk):
 
     # ── STEP 2: Address — Pumi API (Cambodia) ──
 
-    # ── API helpers ────────────────────────────────
+    # ── Pumi data helpers (offline from JSON) ──────
+
+    def _get_pumi_data(self):
+        if self._pumi_data is None:
+            try:
+                self._pumi_data = json.loads(PUMI_DATA_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                self._pumi_data = {"provinces": [], "districts": [], "communes": [], "villages": []}
+        return self._pumi_data
 
     def _fetch_provinces(self):
-        try:
-            r = requests.get(f"{PUMI_API}/provinces", timeout=10)
-            r.raise_for_status()
-            return [(p["id"], p["name_en"]) for p in r.json()]
-        except Exception:
-            return list(CAMBODIA_PROVINCES)
+        data = self._get_pumi_data()
+        provinces = data.get("provinces", [])
+        if provinces:
+            return [(p["id"], p["name_en"]) for p in provinces]
+        return list(CAMBODIA_PROVINCES)
 
     def _fetch_districts(self, province_id):
-        try:
-            r = requests.get(f"{PUMI_API}/districts", params={"province_id": province_id}, timeout=10)
-            r.raise_for_status()
-            return [(d["id"], d["name_en"]) for d in r.json()]
-        except Exception:
-            return []
+        data = self._get_pumi_data()
+        return [(d["id"], d["name_en"]) for d in data.get("districts", [])
+                if d.get("province_id") == province_id]
 
     def _fetch_communes(self, district_id):
-        try:
-            r = requests.get(f"{PUMI_API}/communes", params={"district_id": district_id}, timeout=10)
-            r.raise_for_status()
-            return [(c["id"], c["name_en"]) for c in r.json()]
-        except Exception:
-            return []
+        data = self._get_pumi_data()
+        return [(c["id"], c["name_en"]) for c in data.get("communes", [])
+                if c.get("district_id") == district_id]
 
     def _fetch_villages(self, commune_id):
-        try:
-            r = requests.get(f"{PUMI_API}/villages", params={"commune_id": commune_id}, timeout=10)
-            r.raise_for_status()
-            return [(v["id"], v["name_en"]) for v in r.json()]
-        except Exception:
-            return []
+        data = self._get_pumi_data()
+        return [(v["id"], v["name_en"]) for v in data.get("villages", [])
+                if v.get("commune_id") == commune_id]
 
     def _populate_combo(self, combo_var, combo_widget, items):
         values = [name for _, name in items]
